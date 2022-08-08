@@ -1,0 +1,71 @@
+---
+title: "nflspread"
+author: "JMeerse"
+date: "2022-08-07"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(nflreadr)
+library(tidyverse)
+library(nflfastR)
+library(ggimage)
+library(nflplotR)
+```
+
+#load data
+```{r}
+season21 <- load_schedules(seasons = 2021)
+```
+
+#EDA
+```{r}
+season21 %>% 
+  filter(game_type == "REG") %>%
+  ggplot(aes(x = spread_line, y = result)) +
+  geom_point() + 
+  geom_abline(slope = 1, intercept = 0) +
+  facet_wrap(~ home_team)
+
+season21 %>% ggplot(aes(x = spread_line)) + geom_histogram()
+season21 %>% filter(game_type == "REG") %>% ggplot(aes(x = spread_line)) + geom_dotplot() + facet_wrap(~ home_team)
+
+summary(season21$spread_line)
+
+home <- season21 %>% group_by(home_team) %>% 
+  summarise(line_h = mean(spread_line, na.rm = TRUE),
+            h_result = mean(result, na.rm = TRUE),
+            home = "home"
+            ) %>% 
+  ungroup()
+
+home
+
+home <- home %>% rename(team = home_team)
+
+away <- season21 %>% group_by(away_team) %>% 
+  summarise(line_a = mean(spread_line, na.rm = TRUE),
+            a_result = -1*mean(result, na.rm = TRUE),
+            away = "away"
+            ) %>% 
+  ungroup()
+
+away
+
+away <- away %>% rename(team = away_team)
+
+spreads <- left_join(home, away, by = "team")
+
+spreads <- left_join(spreads, teams_colors_logos, by = c("team" = "team_abbr"))
+
+hspread_plot <- spreads %>% 
+  ggplot(aes(x = line_h, y = h_result)) + 
+  geom_nfl_logos(aes(team_abbr = team), width = 0.065, alpha = 0.7) +
+  geom_abline(slope = 1, intercept = 0) #timeout issues with ggimage, switched to nflplotR and issue went away.
+
+hspread_plot
+
+spreads %>% ggplot(aes(x = line_h)) + geom_dotplot()
+
+```
