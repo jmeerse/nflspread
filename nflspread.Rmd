@@ -1,12 +1,19 @@
 ---
 title: "nflspread"
 author: "JMeerse"
-date: "2022-08-07"
+date: "2022-09-05"
 output: html_document
 ---
+## Home field advantage in the NFL
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+We'll explore 10 years of data from 2012 - 2021 to see if it exists, and what the advantage is.
+
+```{r setup, results="hide"}
+
+# install.packages("nflreadr")
+# install.packages("nflfastR")
+# install.packages("nflplotR")
+
 library(nflreadr)
 library(tidyverse)
 library(nflfastR)
@@ -14,58 +21,66 @@ library(ggimage)
 library(nflplotR)
 ```
 
-#load data
+# Load data
+The nflreadR package access to the weekly results for each season loaded.
 ```{r}
-season21 <- load_schedules(seasons = 2021)
+seasons <- load_schedules(seasons =2012:2021)
 ```
 
-#EDA
+Use the data dictionary to see what each variable represents.
+
+<https://nflreadr.nflverse.com/articles/dictionary_schedules.html>
+
+# Looking at the data.
+
+We need a new variable to determine if the home or away team won the game.
+
+`mutate()` creates a new variable.
+
+`if_else()` works as: 
+   "check condition", 
+  "if true assign first value", 
+  "if false assign second value."
 ```{r}
-season21 %>% 
-  filter(game_type == "REG") %>%
-  ggplot(aes(x = spread_line, y = result)) +
-  geom_point() + 
-  geom_abline(slope = 1, intercept = 0) +
-  facet_wrap(~ home_team)
+seasons <- seasons %>% 
+  mutate(winner = if_else(result > 0, home_team, away_team),
+         loser = if_else(result < 0, home_team, away_team))
 
-season21 %>% ggplot(aes(x = spread_line)) + geom_histogram()
-season21 %>% filter(game_type == "REG") %>% ggplot(aes(x = spread_line)) + geom_dotplot() + facet_wrap(~ home_team)
+seasons <- seasons %>% 
+  mutate(win_ha = if_else(winner == home_team, "home", "away"))
 
-summary(season21$spread_line)
+seasons <- seasons[seasons$result != 0, ] #this gets rid of ties
+```
 
-home <- season21 %>% group_by(home_team) %>% 
-  summarise(line_h = mean(spread_line, na.rm = TRUE),
-            h_result = mean(result, na.rm = TRUE),
-            home = "home"
-            ) %>% 
-  ungroup()
+## Regular season vs Playoffs
+We'll create 2 more dataframes, one for each season type.
+```{r}
+seasons_reg <- seasons %>% filter(game_type == "REG")
+seasons_plyoff <- seasons %>% filter(game_type != "REG")
 
-home
+```
 
-home <- home %>% rename(team = home_team)
+## Now lets see how home teams perform.
+```{r}
+seasons_reg %>% ggplot(aes(x = win_ha)) + geom_bar() #bar chart of overall home or away winning percentage
 
-away <- season21 %>% group_by(away_team) %>% 
-  summarise(line_a = mean(spread_line, na.rm = TRUE),
-            a_result = -1*mean(result, na.rm = TRUE),
-            away = "away"
-            ) %>% 
-  ungroup()
+seasons_reg %>% count(win_ha) %>% mutate(prop = n / sum(n)) # table of winning percents for entire 10 year period
 
-away
+```
 
-away <- away %>% rename(team = away_team)
+## Let's break things down by season
+```{r}
+by_season <- seasons_reg %>% group_by(season, win_ha) %>%
+  summarise(count = n()) %>%
+  mutate(freq = round(count / sum(count), 3)) %>% ungroup()
 
-spreads <- left_join(home, away, by = "team")
+by_season
 
-spreads <- left_join(spreads, teams_colors_logos, by = c("team" = "team_abbr"))
+by_season %>% filter(win_ha == "home") %>% 
+  ggplot(aes(x = season, y = freq)) + 
+  geom_line() +
+  labs()
 
-hspread_plot <- spreads %>% 
-  ggplot(aes(x = line_h, y = h_result)) + 
-  geom_nfl_logos(aes(team_abbr = team), width = 0.065, alpha = 0.7) +
-  geom_abline(slope = 1, intercept = 0) #timeout issues with ggimage, switched to nflplotR and issue went away.
-
-hspread_plot
-
-spreads %>% ggplot(aes(x = line_h)) + geom_dotplot()
-
+#repeat the above for the playoffs.  
+#Can we group_by home team to see the effect at each stadium? 
 ```
